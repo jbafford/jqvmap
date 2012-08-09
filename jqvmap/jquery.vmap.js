@@ -18,6 +18,9 @@
     scaleColors: 1,
     normalizeFunction: 1,
     enableZoom: 1,
+    zoomMaxStep: 1,
+    zoomStep: 1,
+    translation: 1,
     showTooltip: 1,
     borderColor: 1,
     borderWidth: 1,
@@ -30,7 +33,8 @@
     onLabelShow: 'labelShow',
     onRegionOver: 'regionMouseOver',
     onRegionOut: 'regionMouseOut',
-    onRegionClick: 'regionClick'
+    onRegionClick: 'regionClick',
+    onZoomChange: 'zoomChange'
   };
 
   $.fn.vectorMap = function (options){
@@ -44,6 +48,8 @@
       scaleColors: ['#b6d6ff', '#005ace'],
       normalizeFunction: 'linear',
       enableZoom: true,
+      zoomMaxStep: 4,
+      zoomScale: 1,
       showTooltip: true,
       borderColor: '#818181',
       borderWidth: 1,
@@ -66,10 +72,6 @@
       defaultParams.container = this;
       this.css({ position: 'relative', overflow: 'hidden' });
 	  
-      map = new WorldMap(defaultParams);
-
-      this.data('mapObject', map);
-
       for (var e in apiEvents)
       {
         if (defaultParams[e])
@@ -77,6 +79,10 @@
           this.bind(apiEvents[e] + '.jqvmap', defaultParams[e]);
         }
       }
+      
+      map = new WorldMap(defaultParams);
+
+      this.data('mapObject', map);
     }
   };
 
@@ -427,6 +433,8 @@
 
     this.width = params.container.width();
     this.height = params.container.height();
+    
+    this.zoomMaxStep = params.zoomMaxStep;
 
     this.resize();
 
@@ -559,34 +567,34 @@
 	  var path = e.target;
       var code = e.target.id.split('_').pop();
 	  
-	  jQuery(params.container).trigger('regionClick.jqvmap', [code, mapData.pathes[code].name]);
-
-	  if(params.multiSelectRegion){
-		if(selectedRegions.indexOf(code) !== -1){
-		  selectedRegions.splice(selectedRegions.indexOf(code), 1);
-
-		  path.currentFillColor = params.color;
-		  path.setFill(params.color);
-		}else{
-		  selectedRegions.push(code);
-			
-		  if (params.selectedColor !== null) {
-		    path.currentFillColor = params.selectedColor;
-		    path.setFill(params.selectedColor);
-		  }
-		}
-	  }else{
-		selectedRegions = new Array;
-		selectedRegions.push(code);
+	  var rcEvent = $.Event('regionClick.jqvmap');
+	  jQuery(params.container).trigger(rcEvent, [code, mapData.pathes[code].name]);
 	  
-		if (params.selectedColor !== null) {
-		  path.currentFillColor = params.selectedColor;
-		  path.setFill(params.selectedColor);
-		}
+	  if(!rcEvent.isDefaultPrevented()) {
+              if(params.multiSelectRegion){
+                if(selectedRegions.indexOf(code) !== -1){
+                  selectedRegions.splice(selectedRegions.indexOf(code), 1);
+            
+                  path.currentFillColor = params.color;
+                  path.setFill(params.color);
+                }else{
+                  selectedRegions.push(code);
+                    
+                  if (params.selectedColor !== null) {
+                    path.currentFillColor = params.selectedColor;
+                    path.setFill(params.selectedColor);
+                  }
+                }
+              }else{
+                selectedRegions = new Array;
+                selectedRegions.push(code);
+              
+                if (params.selectedColor !== null) {
+                  path.currentFillColor = params.selectedColor;
+                  path.setFill(params.selectedColor);
+                }
+              }
 	  }
-	  
-	  //console.log(selectedRegions);
-
     });
 
     if(params.showTooltip)
@@ -617,6 +625,11 @@
     }
 
     this.bindZoomButtons();
+    
+    this.zoomChangeEvent = $.Event('zoomChange.jqvmap');
+    this.setZoomStep(params.zoomStep || this.zoomStep);
+    if(params.translation)
+        this.setTranslation(params.translation);
 
     WorldMap.mapIndex++;
   };
@@ -633,9 +646,9 @@
     countries: {},
     countriesColors: {},
     countriesData: {},
-    zoomStep: 1.4,
+    zoomScaleFactor: 1.4,
     zoomMaxStep: 4,
-    zoomCurStep: 1,
+    zoomStep: 1,
 
     setColors: function (key, color)
     {
@@ -851,43 +864,42 @@
 
       });
     },
+    
+    setTranslation: function(newTrans) {
+      this.transX = newTrans[0];
+      this.transY = newTrans[1];
+      this.applyTransform();
+    },
+    
+    setZoomStep: function(newZoomStep) {
+        if (newZoomStep > 0 && newZoomStep <= this.zoomMaxStep)
+        {
+            var oldScale = this.scale;
+            var oldStep = this.zoomStep;
+            
+            jQuery(this.container).trigger(this.zoomChangeEvent, [oldStep, newZoomStep]);
+            if(!this.zoomChangeEvent.isDefaultPrevented()) {
+                var newScale = this.baseScale * Math.pow(this.zoomScaleFactor, newZoomStep - 1);
+                
+                this.transX += (this.width / newScale - this.width / oldScale) / 2;
+                this.transY += (this.height / newScale - this.height / oldScale) / 2;
+                this.setScale(newScale);
+                
+                this.zoomStep = newZoomStep;
+            }
+        }
+    },
 
     bindZoomButtons: function ()
     {
       var map = this;
-      var sliderDelta = (jQuery('#zoom').innerHeight() - 6 * 2 - 15 * 2 - 3 * 2 - 7 - 6) / (this.zoomMaxStep - this.zoomCurStep);
-
-      this.container.find('.jqvmap-zoomin').click(function ()
-      {
-        if (map.zoomCurStep < map.zoomMaxStep)
-        {
-          var curTransX = map.transX;
-          var curTransY = map.transY;
-          var curScale = map.scale;
-
-          map.transX -= (map.width / map.scale - map.width / (map.scale * map.zoomStep)) / 2;
-          map.transY -= (map.height / map.scale - map.height / (map.scale * map.zoomStep)) / 2;
-          map.setScale(map.scale * map.zoomStep);
-          map.zoomCurStep++;
-
-          jQuery('#zoomSlider').css('top', parseInt(jQuery('#zoomSlider').css('top'), 10) - sliderDelta);
-        }
+      
+      this.container.find('.jqvmap-zoomin').click(function () {
+        map.setZoomStep(map.zoomStep + 1);
       });
 
-      this.container.find('.jqvmap-zoomout').click(function ()
-      {
-        if (map.zoomCurStep > 1) {
-          var curTransX = map.transX;
-          var curTransY = map.transY;
-          var curScale = map.scale;
-
-          map.transX += (map.width / (map.scale / map.zoomStep) - map.width / map.scale) / 2;
-          map.transY += (map.height / (map.scale / map.zoomStep) - map.height / map.scale) / 2;
-          map.setScale(map.scale / map.zoomStep);
-          map.zoomCurStep--;
-
-          jQuery('#zoomSlider').css('top', parseInt(jQuery('#zoomSlider').css('top'), 10) + sliderDelta);
-        }
+      this.container.find('.jqvmap-zoomout').click(function () {
+        map.setZoomStep(map.zoomStep - 1);
       });
     },
 

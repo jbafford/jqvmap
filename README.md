@@ -97,6 +97,18 @@ Colors of individual map regions. Keys of the colors objects are country codes a
 
 Whether to Enable Map Zoom ( true or false, defaults to true)
 
+**zoomMaxStep** *4*
+
+The number of zoom levels ( defaults to 4 ).
+
+**zoomStep** *1*
+
+The zoom level ( defaults to 1 )
+
+**translation** *[transX, transY]*
+
+The x-y translation of the map ( defaults to null ).
+
 **hoverColor** *'#c9dfaf'*
 
 Color of the region when mouse pointer is over it.
@@ -459,6 +471,10 @@ Callback function which will be called when the mouse cursor leaves the region p
 
 Callback function which will be called when the user clicks the region path. Country code will be passed to the callback as argument. This callback may be called while the user is moving the map. If you need to distinguish between a "real" click and a click resulting from moving the map, you can inspect **$(event.currentTarget).data('mapObject').isMoving**.
 
+**onZoomChange** *function(event, oldZoomStep, newZoomStep)*
+
+Callback function which will be called when the zoom level is changed. The old and new zoom levels are passed to the callback as arguments.
+
 Dynamic Updating
 ======
 
@@ -486,6 +502,10 @@ You can define callback function when you initialize JQVMap:
 	    onRegionClick: function(event, code, region)
 	    {
      
+	    },
+	    onZoomChange: function(event, oldZoomStep, newZoomStep)
+	    {
+	    
 	    }
 	});
 
@@ -511,6 +531,12 @@ Or later using standard jQuery mechanism:
 	);
 	jQuery('#vmap').bind('regionClick.jqvmap',
 	    function(event, code, region)
+	    {
+     
+	    }
+	);
+	jQuery('#vmap').bind('zoomChange.jqvmap',
+	    function(event, oldZoomStep, newZoomStep)
 	    {
      
 	    }
